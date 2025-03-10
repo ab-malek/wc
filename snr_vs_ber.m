@@ -2,72 +2,119 @@ clc
 clear all
 close all
 
-%% Define M-PSK Parameters
-M = 8; % Number of symbols in M-PSK
-bps = log2(M); % Bits per symbol
+%% Custom Functions
+function result = de2bi(varargin)
+    % Custom de2bi function
+    if nargin == 2
+        num = varargin{1};
+        bits = varargin{2};
+        result = zeros(length(num), bits);
+        for i = 1:length(num)
+            for j = 1:bits
+                result(i, bits - j + 1) = mod(num(i), 2);
+                num(i) = floor(num(i) / 2);
+            end
+        end
+    else
+        error('Custom de2bi function requires 2 inputs.');
+    end
+end
 
-%% Generate Random Symbols or Convert Text to Binary
-%nosymbol = 600; 
-%symbols = randi([0, 255], 1, nosymbol); % Random symbols in range 0-255
-%symbolToBitMapping = de2bi(symbols, 8, 'left-msb'); % Convert to 8-bit binary
+function result = bi2de(varargin)
+    % Custom bi2de function
+    if nargin == 2
+        bits = varargin{1};
+        result = zeros(size(bits, 1), 1);
+        for i = 1:size(bits, 1)
+            for j = 1:size(bits, 2)
+                result(i) = result(i) + bits(i, j) * 2^(size(bits, 2) - j);
+            end
+        end
+    else
+        error('Custom bi2de function requires 2 inputs.');
+    end
+end
 
-% Convert Text to Binary
-txt1 = 'Information and communication engineering'; 
-symbols = double(txt1); % Convert characters to ASCII values
-symbolToBitMapping = de2bi(symbols, 8, 'left-msb'); % Convert ASCII to binary
+function result = pskmod(data, M)
+    % Custom pskmod function
+    phase = 2 * pi * data / M;
+    result = cos(phase) + 1i * sin(phase);
+end
 
-%% Reshape Bits for Transmission
+function result = pskdemod(data, M)
+    % Custom pskdemod function
+    phase = angle(data);
+    result = round(mod(phase * M / (2 * pi), M));
+end
+
+function result = awgn(data, snr, ~)
+    % Custom awgn function
+    signal_power = mean(abs(data).^2);
+    noise_power = signal_power / (10^(snr / 10));
+    noise = sqrt(noise_power / 2) * (randn(size(data)) + 1i * randn(size(data)));
+    result = data + noise;
+end
+
+function [noe, ber] = biterr(data1, data2)
+    % Custom biterr function
+    noe = sum(data1 ~= data2);
+    ber = noe / length(data1);
+end
+
+%% Main Program
+%% bps
+M = 8;
+bps = log2(M);
+
+%% input + reshape
+txt1 = 'Information and communication engineering';
+symbols = double(txt1);
+symbolToBitMapping = de2bi(symbols, 8);
+
 totNoBits = numel(symbolToBitMapping);
 inputReshapedBits = reshape(symbolToBitMapping, 1, totNoBits);
 
-%% Padding Bits (if necessary)
-remainder = rem(totNoBits, bps); % Check remainder for M-PSK grouping
-if remainder == 0
+%% padding
+remainder = rem(totNoBits, bps);
+if(remainder == 0)
     userPaddedData = inputReshapedBits;
 else
-    paddingBits = zeros(1, bps - remainder); % Zero-padding
+    paddingBits = zeros(1, bps - remainder);
     userPaddedData = [inputReshapedBits paddingBits];
 end
 
-%% M-PSK Modulation
-userPaddedData = reshape(userPaddedData, numel(userPaddedData)/bps, bps);
-bitToSymbolMapping = bi2de(userPaddedData, 'left-msb'); % Convert to decimal symbols
-modulatedSymbol = pskmod(bitToSymbolMapping, M); % PSK modulation
+%% modulation
+reshapedUserPaddedData = reshape(userPaddedData, numel(userPaddedData)/bps, bps);
+bitToSymbolMapping = bi2de(reshapedUserPaddedData, 'left-msb');
+modulatedSymbol = pskmod(bitToSymbolMapping, M);
 
-%% Transmission Over AWGN Channel
+%% channel
 SNR = [];
 BER = [];
+
 for snr = 0:15
     SNR = [SNR snr];
-    
-    % Add AWGN noise
     noisySymbols = awgn(modulatedSymbol, snr, 'measured');
-    
-    % PSK Demodulation
     demodulatedSymbol = pskdemod(noisySymbols, M);
-    
-    % Convert Symbols to Bits
-    demodulatedSymbolToBitMapping = de2bi(demodulatedSymbol, 'left-msb'); 
+
+    % original data
+    demodulatedSymbolToBitMapping = de2bi(demodulatedSymbol, bps);
     reshapedDemodulatedBits = reshape(demodulatedSymbolToBitMapping, 1, numel(demodulatedSymbolToBitMapping));
 
-    % Remove Padding
-    demodulatedBitsWithoutPadding = reshapedDemodulatedBits(1: totNoBits);
+    % remove padding
+    demodulatedBitsWithoutPadding = reshapedDemodulatedBits(1:totNoBits);
 
-    % Compute Bit Error Rate (BER)
     [noe, ber] = biterr(inputReshapedBits, demodulatedBitsWithoutPadding);
     BER = [BER ber];
 
-    %% Recover Original Text
+    % Original Text
     txtBits = reshape(demodulatedBitsWithoutPadding, numel(demodulatedBitsWithoutPadding)/8, 8);
     txtBitsDecimal = bi2de(txtBits, 'left-msb');
     msg = char(txtBitsDecimal);
 end
 
-
-
-%% Plot BER vs. SNR
 figure(1)
-semilogy(SNR, BER, '-o');
+semilogy(SNR, BER, '--');
 xlabel('SNR');
 ylabel('BER');
 title('SNR vs BER');
