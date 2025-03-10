@@ -7,9 +7,9 @@ M = 8; % Number of symbols in M-PSK
 bps = log2(M); % Bits per symbol
 
 %% Generate Random Symbols or Convert Text to Binary
-nosymbol = 600; 
-symbols = randi([0, 255], 1, nosymbol); % Random symbols in range 0-255
-symbolToBitMapping = de2bi(symbols, 8, 'left-msb'); % Convert to 8-bit binary
+%nosymbol = 600; 
+%symbols = randi([0, 255], 1, nosymbol); % Random symbols in range 0-255
+%symbolToBitMapping = de2bi(symbols, 8, 'left-msb'); % Convert to 8-bit binary
 
 % Convert Text to Binary
 txt1 = 'Information and communication engineering'; 
@@ -56,12 +56,14 @@ for snr = 0:15
     % Compute Bit Error Rate (BER)
     [noe, ber] = biterr(inputReshapedBits, demodulatedBitsWithoutPadding);
     BER = [BER ber];
+
+    %% Recover Original Text
+    txtBits = reshape(demodulatedBitsWithoutPadding, numel(demodulatedBitsWithoutPadding)/8, 8);
+    txtBitsDecimal = bi2de(txtBits, 'left-msb');
+    msg = char(txtBitsDecimal);
 end
 
-%% Recover Original Text
-txtBits = reshape(demodulatedBitsWithoutPadding, numel(demodulatedBitsWithoutPadding)/8, 8);
-txtBitsDecimal = bi2de(txtBits, 'left-msb');
-msg = char(txtBitsDecimal)';
+
 
 %% Plot BER vs. SNR
 figure(1)
